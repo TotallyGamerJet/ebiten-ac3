@@ -21,20 +21,7 @@ package main
 // #include <stdint.h>
 // #include <stdio.h>
 // #include "a52.h"
-// #include "audio_out.h"
-// extern ao_open_t * output_open;
-// extern ao_instance_t * output;
-// extern a52_state_t * state;
-// ao_instance_t * open_output (void) {
-// 	return output_open();
-// }
-//
-// int output_setup(ao_instance_t * instance, int sample_rate, int * flags, level_t * level, sample_t * bias) {
-//	return output->setup (instance, sample_rate, flags, level, bias);
-// }
-// int output_play(ao_instance_t * instance, int flags, sample_t * samples) {
-// 	return output->play (instance, flags, samples);
-// }
+// a52_state_t * state;
 import "C"
 import (
 	"bytes"
@@ -51,7 +38,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-const bufferSize = 4096
+const (
+	bufferSize    = 4096
+	CONVERT_LEVEL = 1
+	CONVERT_BIAS  = 384
+)
 const (
 	screenWidth  = 640
 	screenHeight = 480
@@ -70,16 +61,9 @@ func NewGame() (*Game, error) {
 	// Initialize audio context.
 	g.audioContext = audio.NewContext(sampleRate)
 
-	drivers := unsafe.Slice(C.ao_drivers(), 11)
-	C.output_open = drivers[0].open
-	in_file, err := os.Open("sample-1.ac3")
+	in_file, err := os.Open("/Users/jarrettkuklis/Documents/GolandProjects/audio/sample-1.ac3")
 	if err != nil {
 		panic(err)
-	}
-
-	C.output = C.open_output()
-	if C.output == nil {
-		log.Fatalln("Cannot open output")
 	}
 
 	C.state = C.a52_init(0)
@@ -93,7 +77,10 @@ func NewGame() (*Game, error) {
 		if sampleRate != sample_rate {
 			panic(sample_rate)
 		}
-		return C.output_setup(C.output, sample_rate, flags, level, bias)
+		*flags = A52_STEREO
+		*level = CONVERT_LEVEL
+		*bias = CONVERT_BIAS
+		return 0
 	}, func(flags C.int, samplesPtr *C.sample_t) C.int {
 		if ch := flags & A52_CHANNEL_MASK; ch != A52_STEREO && ch != A52_DOLBY {
 			panic(flags)
@@ -113,7 +100,7 @@ func NewGame() (*Game, error) {
 			binary.LittleEndian.PutUint16(b[num*i+sizeOfSample:], uint16(convert(s)))
 		}
 		converted = append(converted, b...)
-		return C.output_play(C.output, flags, samplesPtr) // prints the converted .wav to stdio
+		return 0
 	})
 
 	// Create an audio.Player that has one stream.
