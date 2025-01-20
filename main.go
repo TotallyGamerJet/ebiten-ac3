@@ -42,7 +42,6 @@ import (
 	_ "image/png"
 	"io"
 	"log"
-	"math"
 	"os"
 	"unsafe"
 
@@ -102,28 +101,39 @@ func NewGame() (*Game, error) {
 		const (
 			samplesPerSpeaker = 256
 			numberOfSpeakers  = 2
-			sizeOfFloat       = 4
+			sizeOfSample      = 2
 		)
-		b := make([]byte, samplesPerSpeaker*numberOfSpeakers*sizeOfFloat)
-		samples := unsafe.Slice((*float32)(unsafe.Pointer(samplesPtr)), samplesPerSpeaker*numberOfSpeakers)
-		num := sizeOfFloat * numberOfSpeakers
+		b := make([]byte, samplesPerSpeaker*numberOfSpeakers*sizeOfSample)
+		samples := unsafe.Slice((*int32)(unsafe.Pointer(samplesPtr)), samplesPerSpeaker*numberOfSpeakers)
+		num := sizeOfSample * numberOfSpeakers
 		for i, s := range samples[:256] {
-			binary.LittleEndian.PutUint32(b[num*i:], math.Float32bits(float32(s)))
+			binary.LittleEndian.PutUint16(b[num*i:], uint16(convert(s)))
 		}
 		for i, s := range samples[256 : 256*2] {
-			binary.LittleEndian.PutUint32(b[num*i+4:], math.Float32bits(float32(s)))
+			binary.LittleEndian.PutUint16(b[num*i+sizeOfSample:], uint16(convert(s)))
 		}
 		converted = append(converted, b...)
 		return C.output_play(C.output, flags, samplesPtr) // prints the converted .wav to stdio
 	})
 
 	// Create an audio.Player that has one stream.
-	g.audioPlayer, err = g.audioContext.NewPlayerF32(bytes.NewReader(converted))
+	g.audioPlayer, err = g.audioContext.NewPlayer(bytes.NewReader(converted))
 	if err != nil {
 		return nil, err
 	}
 
 	return g, nil
+}
+
+func convert(i int32) int16 {
+	i -= 0x43C00000
+	if int(i) > 32767 {
+		return 32767
+	}
+	if int(i) < -32768 {
+		return -32768
+	}
+	return int16(i)
 }
 
 func (g *Game) Update() error {
