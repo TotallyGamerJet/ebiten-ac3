@@ -22,13 +22,9 @@ package main
 // #include <stdio.h>
 // #include "a52.h"
 // #include "audio_out.h"
-// extern void es_loop (void);
-// extern FILE * in_file;
-// extern void handle_args (int argc, char ** argv);
 // extern ao_open_t * output_open;
 // extern ao_instance_t * output;
 // extern a52_state_t * state;
-// extern void a52_decode_data (uint8_t * start, uint8_t * end);
 // ao_instance_t * open_output (void) {
 // 	return output_open();
 // }
