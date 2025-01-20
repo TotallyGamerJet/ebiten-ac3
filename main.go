@@ -95,7 +95,7 @@ func NewGame() (*Game, error) {
 		}
 		return C.output_setup(C.output, sample_rate, flags, level, bias)
 	}, func(flags C.int, samplesPtr *C.sample_t) C.int {
-		if flags&A52_CHANNEL_MASK != A52_STEREO {
+		if ch := flags & A52_CHANNEL_MASK; ch != A52_STEREO && ch != A52_DOLBY {
 			panic(flags)
 		}
 		const (
