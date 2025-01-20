@@ -1,5 +1,5 @@
 Build then run
 ```shell
-go build
+go build -o audio
 ./audio > out.wav
 ```
