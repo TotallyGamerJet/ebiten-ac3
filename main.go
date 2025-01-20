@@ -19,10 +19,18 @@ package main
 
 import "C"
 import (
+	"bytes"
+	"encoding/binary"
 	"io"
 	"log"
+	"math"
 	"os"
 	"unsafe"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 // #cgo CFLAGS: -std=gnu89
@@ -53,8 +61,24 @@ import (
 )
 
 const bufferSize = 4096
+const (
+	screenWidth  = 640
+	screenHeight = 480
+	sampleRate   = 48000
+)
 
-func main() {
+type Game struct {
+	audioContext *audio.Context
+	audioPlayer  *audio.Player
+}
+
+func NewGame() (*Game, error) {
+	g := &Game{}
+
+	var err error
+	// Initialize audio context.
+	g.audioContext = audio.NewContext(sampleRate)
+
 	drivers := unsafe.Slice(C.ao_drivers(), 11)
 	C.output_open = drivers[0].open
 	in_file, err := os.Open("sample-1.ac3")
@@ -71,12 +95,80 @@ func main() {
 	if C.state == nil {
 		log.Fatalln("A52 init failed")
 	}
-
+	// I convert the entire thing before trying to play
+	// not the best but just trying to get it to work
+	var converted []byte
 	es_loop(in_file, func(sample_rate C.int, flags *C.int, level *C.level_t, bias *C.sample_t) C.int {
+		if sampleRate != sample_rate {
+			panic(sample_rate)
+		}
 		return C.output_setup(C.output, sample_rate, flags, level, bias)
-	}, func(flags C.int, samples *C.sample_t) C.int {
-		return C.output_play(C.output, flags, samples)
+	}, func(flags C.int, samplesPtr *C.sample_t) C.int {
+		if flags&A52_CHANNEL_MASK != A52_STEREO {
+			panic(flags)
+		}
+		const (
+			samplesPerSpeaker = 256
+			numberOfSpeakers  = 2
+			sizeOfFloat       = 4
+		)
+		b := make([]byte, samplesPerSpeaker*numberOfSpeakers*sizeOfFloat)
+		samples := unsafe.Slice((*float32)(unsafe.Pointer(samplesPtr)), samplesPerSpeaker*numberOfSpeakers)
+		num := sizeOfFloat * numberOfSpeakers
+		for i, s := range samples[:256] {
+			binary.LittleEndian.PutUint32(b[num*i:], math.Float32bits(float32(s)))
+		}
+		for i, s := range samples[256 : 256*2] {
+			binary.LittleEndian.PutUint32(b[num*i+4:], math.Float32bits(float32(s)))
+		}
+		converted = append(converted, b...)
+		return C.output_play(C.output, flags, samplesPtr) // prints the converted .wav to stdio
 	})
+
+	// Create an audio.Player that has one stream.
+	g.audioPlayer, err = g.audioContext.NewPlayerF32(bytes.NewReader(converted))
+	if err != nil {
+		return nil, err
+	}
+
+	return g, nil
+}
+
+func (g *Game) Update() error {
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		// As audioPlayer has one stream and remembers the playing position,
+		// rewinding is needed before playing when reusing audioPlayer.
+		if err := g.audioPlayer.Rewind(); err != nil {
+			return err
+		}
+
+		g.audioPlayer.Play()
+	}
+	return nil
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	if g.audioPlayer.IsPlaying() {
+		ebitenutil.DebugPrint(screen, "Bump!")
+	} else {
+		ebitenutil.DebugPrint(screen, "Press P to play the wav")
+	}
+}
+
+func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+	return screenWidth, screenHeight
+}
+
+func main() {
+	g, err := NewGame()
+	if err != nil {
+		log.Fatal(err)
+	}
+	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowTitle("AC3 (Ebitengine Demo)")
+	if err := ebiten.RunGame(g); err != nil {
+		log.Fatal(err)
+	}
 
 	C.a52_free(C.state)
 }
@@ -171,4 +263,15 @@ func a52_decode_data(start []byte, setup setupF, play playF) {
 	}
 }
 
+const A52_MONO = 1
+const A52_STEREO = 2
+const A52_3F = 3
+const A52_2F1R = 4
+const A52_3F1R = 5
+const A52_2F2R = 6
+const A52_3F2R = 7
+const A52_CHANNEL1 = 8
+const A52_CHANNEL2 = 9
+const A52_DOLBY = 10
+const A52_CHANNEL_MASK = 15
 const A52_ADJUST_LEVEL = 32
