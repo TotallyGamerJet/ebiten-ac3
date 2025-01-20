@@ -17,22 +17,6 @@
 
 package main
 
-import "C"
-import (
-	"bytes"
-	"encoding/binary"
-	"io"
-	"log"
-	"math"
-	"os"
-	"unsafe"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/audio"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
-)
-
 // #cgo CFLAGS: -std=gnu89
 // #include <stdint.h>
 // #include <stdio.h>
@@ -57,7 +41,19 @@ import (
 // }
 import "C"
 import (
+	"bytes"
+	"encoding/binary"
 	_ "image/png"
+	"io"
+	"log"
+	"math"
+	"os"
+	"unsafe"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 const bufferSize = 4096
